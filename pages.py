@@ -844,7 +844,7 @@ input[type="time"]{position:relative;padding-right:32px}
   <button class="sb-close" id="close-sb"><i class="ti ti-x"></i></button>
   <div class="logo">
     <div class="logo-img"><img src="data:image/png;base64,__LOGO_B64__" alt="A.A-C-P"></div>
-    <div><div class="logo-name">A.A-C-P</div><div class="logo-sub">v2</div></div>
+    <div><div class="logo-name">A.A-C-P</div><div class="logo-sub">v2.1</div></div>
   </div>
   <div class="nav-wrap">
     <div class="nav-sec">پنل</div>
