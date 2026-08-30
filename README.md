@@ -13,7 +13,7 @@
 
 ---
 
-## 📝 تغییرات اخیر (Changelog)
+## 📝 تغییرات اخیر در ورژن 2.1 (Changelog)
 
 ### 🆕 نسخه جدید
 * 🛡️ **فیلتر محتوای بزرگسال (Adult Content Filter):** قابلیت انسداد و فیلترسازی هوشمند وب‌سایت‌ها و محتوای بزرگسال برای افزایش امنیت و سلامت شبکه.
@@ -108,7 +108,7 @@ A professional, feature-rich, and completely free management panel to create and
 
 ---
 
-## 📝 Recent Updates (Changelog)
+## 📝 Recent Updates in v2.1 (Changelog)
 
 ### 🆕 Latest Release
 * 🛡️ **Adult Content Filtering:** Added built-in feature to block adult content and inappropriate websites for safer browsing.
