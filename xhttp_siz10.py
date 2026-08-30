@@ -26,9 +26,12 @@ from main import (
     is_link_allowed,
     is_ip_allowed,
     save_state,
+    log_activity,
 )
 from relay_vless import parse_vless_header, check_and_use
 from speed_limit import throttle
+from content_filter import is_adult_domain
+from social_filter import is_blocked_social
 
 router = APIRouter()
 
@@ -178,8 +181,16 @@ def _req_client_ip(request: Request) -> str:
     return request.client.host if request.client else "نامشخص"
 
 
-async def _open_tcp_from_header(first_chunk: bytes):
+async def _open_tcp_from_header(first_chunk: bytes, uuid: str | None = None):
     command, address, port, payload = await parse_vless_header(first_chunk)
+    if uuid is not None:
+        async with LINKS_LOCK:
+            link = LINKS.get(uuid)
+        if link:
+            if link.get("block_adult") and is_adult_domain(address):
+                raise HTTPException(status_code=403, detail="blocked by content filter")
+            if link.get("social_block") and is_blocked_social(address, link["social_block"]):
+                raise HTTPException(status_code=403, detail="blocked by social filter")
     reader, writer = await asyncio.wait_for(
         asyncio.open_connection(address, port), timeout=TCP_CONNECT_TIMEOUT
     )
@@ -315,7 +326,17 @@ async def _pump_tcp_to_queue(session_id: str, uuid: str, reader: asyncio.StreamR
 
 async def _open_tcp_for_session(session_id: str, uuid: str, sess: dict, first_chunk: bytes):
     """تونل TCP رو از روی هدر VLESS باز می‌کنه و پمپ دانلینک رو راه می‌اندازه."""
-    reader, writer, address, port = await _open_tcp_from_header(first_chunk)
+    try:
+        reader, writer, address, port = await _open_tcp_from_header(first_chunk, uuid=uuid)
+    except HTTPException as exc:
+        if exc.status_code == 403 and ("content filter" in str(exc.detail) or "social filter" in str(exc.detail)):
+            logger.warning(f"🚫 XHTTP[{sess['mode']}] [{session_id[:8]}] blocked: {exc.detail}")
+            log_activity(
+                "connection",
+                f"دسترسی توسط فیلتر ({exc.detail}) مسدود شد (XHTTP-{sess['mode']})",
+                "warn",
+            )
+        raise
     logger.info(f"connect XHTTP[{sess['mode']}] [{session_id[:8]}] -> {address}:{port}")
     sess["writer"] = writer
     sess["tcp_open"] = True

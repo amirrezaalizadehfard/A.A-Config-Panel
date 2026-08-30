@@ -23,6 +23,8 @@ from main import (
     now_ir,
 )
 from speed_limit import throttle
+from content_filter import is_adult_domain
+from social_filter import is_blocked_social
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VLESS Relay — بهینه‌شده برای حداکثر throughput
@@ -156,6 +158,26 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
             return
 
         command, address, port, payload = await parse_vless_header(first_chunk)
+
+        if link.get("block_adult") and is_adult_domain(address):
+            logger.warning(f"🔞 WS [{conn_id}] blocked -> {address} (adult content filter)")
+            log_activity(
+                "connection",
+                f"دسترسی به «{address}» توسط فیلتر محتوای بزرگسال کانفیگ «{link.get('label','?')}» مسدود شد",
+                "warn",
+            )
+            await ws.close(code=1008, reason="blocked by content filter")
+            return
+
+        if link.get("social_block") and is_blocked_social(address, link["social_block"]):
+            logger.warning(f"🚫 WS [{conn_id}] blocked -> {address} (social filter)")
+            log_activity(
+                "connection",
+                f"دسترسی به «{address}» توسط فیلتر شبکه‌های اجتماعی کانفیگ «{link.get('label','?')}» مسدود شد",
+                "warn",
+            )
+            await ws.close(code=1008, reason="blocked by social filter")
+            return
 
         if not await check_and_use(uuid, len(first_chunk)):
             await ws.close(code=1008, reason="quota/disabled")

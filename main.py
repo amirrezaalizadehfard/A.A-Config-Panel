@@ -18,6 +18,10 @@ import uvicorn
 import httpx
 import logging
 
+from social_filter import platform_catalog, valid_platform_ids, SOCIAL_PLATFORMS
+from iran_bypass import is_iranian_domain
+from singbox_config import build_singbox_config, UnsupportedProtocolError
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("A.A-C-P")
 
@@ -552,6 +556,26 @@ async def subscription_single(uuid: str, request: Request):
     return Response(content=content, media_type="text/plain",
                     headers={"profile-title": quote(link["label"]), "support-url": "https://t.me/amirrezaalizadehfard2"})
 
+@app.get("/sub/{uuid}/singbox")
+async def subscription_singbox(uuid: str, request: Request):
+    """کانفیگ JSON سازگار با sing-box — لازم برای اینکه «بای‌پس تونل سایت‌های
+    ایرانی» واقعاً اعمال بشه (این قانون مسیریابی در لینک ساده‌ی vless جا نمی‌شه)."""
+    async with LINKS_LOCK:
+        link = LINKS.get(uuid)
+    if not link or not is_link_allowed(link):
+        raise HTTPException(status_code=404, detail="not found or inactive")
+    host = get_host(request)
+    try:
+        cfg = build_singbox_config(link, uuid, host)
+    except UnsupportedProtocolError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return JSONResponse(content=cfg, headers={"profile-title": quote(link["label"] + " (sing-box)")})
+
+@app.get("/api/social-platforms")
+async def get_social_platforms(_=Depends(require_auth)):
+    """کاتالوگ شبکه‌های اجتماعی برای رندر چک‌باکس‌ها در پنل."""
+    return {"platforms": platform_catalog()}
+
 @app.get("/sub-all")
 async def subscription_all(request: Request, _=Depends(require_auth)):
     import base64
@@ -857,6 +881,9 @@ async def make_link(
     created_by: str = "web_panel",
     schedule_start: str = "00:00",
     schedule_end: str = "23:59",
+    block_adult: bool = False,
+    social_block: list | None = None,
+    bypass_iran: bool = False,
 ) -> tuple[str, dict]:
     if protocol not in PROTOCOLS:
         protocol = DEFAULT_PROTOCOL
@@ -886,6 +913,9 @@ async def make_link(
             "created_by": created_by,
             "schedule_start": schedule_start,
             "schedule_end": schedule_end,
+            "block_adult": bool(block_adult),
+            "social_block": valid_platform_ids(social_block or []),
+            "bypass_iran": bool(bypass_iran),
         }
     if sub_id:
         async with SUBS_LOCK:
@@ -921,6 +951,52 @@ async def set_link_active(uid: str, active: bool) -> dict | None:
         LINKS[uid]["active"] = bool(active)
         label = LINKS[uid]["label"]
     log_activity("link", f"کانفیگ «{label}» {'فعال' if active else 'غیرفعال'} شد", "ok" if active else "warn")
+    asyncio.create_task(save_state())
+    return LINKS[uid]
+
+async def set_link_block_adult(uid: str, block: bool) -> dict | None:
+    """فعال/غیرفعال کردن فیلتر محتوای بزرگسال برای یک کانفیگ (استفاده‌ی مشترک پنل/ربات)."""
+    async with LINKS_LOCK:
+        if uid not in LINKS:
+            return None
+        LINKS[uid]["block_adult"] = bool(block)
+        label = LINKS[uid]["label"]
+    log_activity("link", f"فیلتر محتوای بزرگسال «{label}» {'فعال' if block else 'غیرفعال'} شد", "ok" if block else "info")
+    asyncio.create_task(save_state())
+    return LINKS[uid]
+
+async def set_link_social_block(uid: str, ids: list) -> dict | None:
+    """جایگزینی کامل لیست شبکه‌های اجتماعی مسدودشده برای یک کانفیگ."""
+    async with LINKS_LOCK:
+        if uid not in LINKS:
+            return None
+        LINKS[uid]["social_block"] = valid_platform_ids(ids)
+        label = LINKS[uid]["label"]
+    log_activity("link", f"فیلتر شبکه‌های اجتماعی «{label}» به‌روزرسانی شد", "info")
+    asyncio.create_task(save_state())
+    return LINKS[uid]
+
+async def toggle_link_social(uid: str, platform_id: str) -> dict | None:
+    """تغییر وضعیت یک شبکه‌ی اجتماعی خاص (اضافه/حذف از لیست مسدودها) — مناسب ربات تلگرام."""
+    async with LINKS_LOCK:
+        if uid not in LINKS:
+            return None
+        cur = LINKS[uid].get("social_block") or []
+        cur = [p for p in cur if p != platform_id] if platform_id in cur else (cur + [platform_id])
+        LINKS[uid]["social_block"] = valid_platform_ids(cur)
+        label = LINKS[uid]["label"]
+    log_activity("link", f"فیلتر شبکه‌های اجتماعی «{label}» به‌روزرسانی شد", "info")
+    asyncio.create_task(save_state())
+    return LINKS[uid]
+
+async def set_link_bypass_iran(uid: str, val: bool) -> dict | None:
+    """فعال/غیرفعال کردن بای‌پس تونل برای سایت‌های ایرانی (اعمال واقعی از طریق کانفیگ sing-box انجام می‌شه)."""
+    async with LINKS_LOCK:
+        if uid not in LINKS:
+            return None
+        LINKS[uid]["bypass_iran"] = bool(val)
+        label = LINKS[uid]["label"]
+    log_activity("link", f"بای‌پس تونل ایران «{label}» {'فعال' if val else 'غیرفعال'} شد", "ok" if val else "info")
     asyncio.create_task(save_state())
     return LINKS[uid]
 
@@ -1024,6 +1100,9 @@ async def create_link(request: Request, _=Depends(require_auth)):
         speed_limit_bytes=speed_limit_bytes,
         schedule_start=schedule_start,
         schedule_end=schedule_end,
+        block_adult=bool(body.get("block_adult", False)),
+        social_block=valid_platform_ids(body.get("social_block") or []),
+        bypass_iran=bool(body.get("bypass_iran", False)),
     )
 
     host = get_host(request)
@@ -1132,6 +1211,27 @@ async def update_link(uid: str, request: Request, _=Depends(require_auth)):
             link["schedule_start"] = str(body.get("schedule_start") or "00:00").strip()[:5]
         if "schedule_end" in body:
             link["schedule_end"] = str(body.get("schedule_end") or "23:59").strip()[:5]
+        if "block_adult" in body:
+            link["block_adult"] = bool(body.get("block_adult"))
+            log_activity(
+                "link",
+                f"فیلتر محتوای بزرگسال برای «{label}» {'فعال' if link['block_adult'] else 'غیرفعال'} شد",
+                "ok" if link["block_adult"] else "info",
+            )
+        if "social_block" in body:
+            link["social_block"] = valid_platform_ids(body.get("social_block") or [])
+            log_activity(
+                "link",
+                f"فیلتر شبکه‌های اجتماعی «{label}» به‌روزرسانی شد ({len(link['social_block'])} مورد)",
+                "info",
+            )
+        if "bypass_iran" in body:
+            link["bypass_iran"] = bool(body.get("bypass_iran"))
+            log_activity(
+                "link",
+                f"بای‌پس تونل برای سایت‌های ایرانی «{label}» {'فعال' if link['bypass_iran'] else 'غیرفعال'} شد",
+                "ok" if link["bypass_iran"] else "info",
+            )
         if any(k in body for k in ("label", "note", "limit_value", "expires_days", "fingerprint", "alpn", "port", "ip_limit", "speed_limit_value", "schedule_start", "schedule_end")):
             log_activity("link", f"کانفیگ «{link['label']}» ویرایش شد", "info")
         new_sub = body.get("sub_id", "UNCHANGED")

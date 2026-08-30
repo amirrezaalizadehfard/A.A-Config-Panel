@@ -804,6 +804,24 @@ input[type="time"]{position:relative;padding-right:32px}
       <div class="fg" style="flex:1"><label>محدودیت سرعت (0 = نامحدود)</label><input class="fi" id="el-speed" type="number" min="0" step="0.5" style="width:100%"></div>
       <div class="fg"><label>واحد</label><select class="fs" id="el-speed-unit"><option value="MBIT">Mbps</option><option value="KB">KB/s</option><option value="MB">MB/s</option></select></div>
     </div>
+    <div class="form-row" style="margin-bottom:16px;align-items:center;justify-content:space-between">
+      <div>
+        <label style="display:block"><i class="ti ti-shield-lock"></i> فیلتر محتوای بزرگسال</label>
+        <div style="font-size:11px;color:var(--muted,#8a8f98)">مسدود کردن دسترسی به سایت‌های بزرگسال شناخته‌شده</div>
+      </div>
+      <button type="button" class="tog" id="el-blockadult" onclick="this.classList.toggle('on')" title="فعال/غیرفعال"></button>
+    </div>
+    <div class="fg" style="margin-bottom:16px">
+      <label><i class="ti ti-brand-instagram"></i> فیلتر شبکه‌های اجتماعی (تک‌به‌تک)</label>
+      <div id="el-social-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:4px;margin-top:6px"></div>
+    </div>
+    <div class="form-row" style="margin-bottom:16px;align-items:center;justify-content:space-between">
+      <div>
+        <label style="display:block"><i class="ti ti-map-2"></i> بای‌پس تونل برای سایت‌های ایرانی</label>
+        <div style="font-size:11px;color:var(--muted,#8a8f98)">فقط با پروتکل VLESS+WS و لینک ساب sing-box اعمال می‌شه</div>
+      </div>
+      <button type="button" class="tog" id="el-bypassiran" onclick="this.classList.toggle('on')" title="فعال/غیرفعال"></button>
+    </div>
     <div class="cl"><i class="ti ti-info-circle"></i><span>برای حفظ انقضای فعلی، فیلد انقضا را صفر بگذارید.</span></div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-o" onclick="closeModal('modal-edit-link')">انصراف</button>
@@ -1052,6 +1070,30 @@ input[type="time"]{position:relative;padding-right:32px}
             <span class="chip" onclick="setSpeedLimit(10,this)">۱۰ Mbps</span>
             <span class="chip" onclick="setSpeedLimit(25,this)">۲۵ Mbps</span>
           </div>
+        </div>
+      </div>
+      <div class="cp-row mb16">
+        <div class="cp-block" style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div class="cp-block-label" style="margin-bottom:2px"><i class="ti ti-shield-lock"></i> فیلتر محتوای بزرگسال</div>
+            <div style="font-size:11px;color:var(--muted,#8a8f98)">دسترسی به سایت‌های بزرگسال شناخته‌شده برای این کانفیگ مسدود می‌شود</div>
+          </div>
+          <button type="button" class="tog" id="nl-blockadult" onclick="this.classList.toggle('on')" title="فعال/غیرفعال"></button>
+        </div>
+      </div>
+      <div class="cp-row mb16">
+        <div class="cp-block" style="flex:1">
+          <div class="cp-block-label"><i class="ti ti-brand-instagram"></i> فیلتر شبکه‌های اجتماعی (تک‌به‌تک)</div>
+          <div id="nl-social-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:4px;margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="cp-row mb16">
+        <div class="cp-block" style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div class="cp-block-label" style="margin-bottom:2px"><i class="ti ti-map-2"></i> بای‌پس تونل برای سایت‌های ایرانی</div>
+            <div style="font-size:11px;color:var(--muted,#8a8f98)">بانک‌ها/اپ‌ها/سایت‌های ایرانی مستقیم می‌رن، نه از تونل — فقط با پروتکل VLESS+WS و لینک ساب sing-box اعمال می‌شه</div>
+          </div>
+          <button type="button" class="tog" id="nl-bypassiran" onclick="this.classList.toggle('on')" title="فعال/غیرفعال"></button>
         </div>
       </div>
       <div class="cp-footer">
@@ -1569,6 +1611,30 @@ async function loadActivity(){
   }catch(e){console.error(e)}
 }
 let allSubsList=[],allLinksList=[];
+let socialPlatformsCache=[];
+async function loadSocialPlatforms(){
+  try{
+    const r=await authF('/api/social-platforms');
+    const j=await r.json();
+    socialPlatformsCache=j.platforms||[];
+    renderSocialCheckboxes('nl-social-list', []);
+    renderSocialCheckboxes('el-social-list', []);
+  }catch(e){console.error(e)}
+}
+function renderSocialCheckboxes(containerId, selected){
+  const el=document.getElementById(containerId);
+  if(!el)return;
+  el.innerHTML=socialPlatformsCache.map(p=>`
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 6px;border-radius:6px;cursor:pointer">
+      <input type="checkbox" value="${p.id}" ${selected.includes(p.id)?'checked':''} style="accent-color:var(--pri,#6C5CE7)">
+      <span>${p.emoji} ${esc(p.name)}</span>
+    </label>`).join('');
+}
+function getCheckedSocials(containerId){
+  const el=document.getElementById(containerId);
+  if(!el)return [];
+  return Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+}
 async function loadLinks(){
   try{
     const [lr,sr]=await Promise.all([authF('/api/links'),authF('/api/subs')]);
@@ -1614,6 +1680,9 @@ async function loadLinks(){
         <span class="cfg-sub-tag" title="Fingerprint"><i class="ti ti-fingerprint"></i> ${esc(l.fingerprint||'chrome')}</span>
         <span class="cfg-sub-tag" title="آی‌پی‌های متصل / محدودیت"><i class="ti ti-users"></i> ${l.connected_ips||0}${l.ip_limit?('/'+l.ip_limit):' (∞)'}</span>
         <span class="cfg-sub-tag" title="محدودیت سرعت"><i class="ti ti-gauge"></i> ${l.speed_limit_bytes?((l.speed_limit_bytes*8/1024/1024).toFixed(1)+' Mbps'):'نامحدود'}</span>
+        ${l.block_adult?'<span class="cfg-sub-tag" title="فیلتر محتوای بزرگسال فعال است" style="color:var(--green)"><i class="ti ti-shield-lock"></i> فیلتر بزرگسال</span>':''}
+        ${(l.social_block&&l.social_block.length)?`<span class="cfg-sub-tag" title="شبکه‌های اجتماعی مسدودشده: ${l.social_block.map(pid=>esc(pid)).join(', ')}" style="color:var(--amber)"><i class="ti ti-ban"></i> ${l.social_block.length} شبکه مسدود</span>`:''}
+        ${l.bypass_iran?'<span class="cfg-sub-tag" title="بای‌پس تونل برای سایت‌های ایرانی فعال است" style="color:var(--blue,#5B9BD5)"><i class="ti ti-map-2"></i> بای‌پس ایران</span>':''}
         ${l.sub_id&&allSubsList.find(s=>s.sub_id===l.sub_id)?`<span class="cfg-sub-tag"><i class="ti ti-folder"></i> ${esc(allSubsList.find(s=>s.sub_id===l.sub_id).name)}</span>`:''}
       </div>
       <div class="cfg-divider-v"></div>
@@ -1622,6 +1691,7 @@ async function loadLinks(){
         <button class="btn btn-sm btn-g btn-icon" onclick="navigator.clipboard.writeText('${esc(l.vless_link)}').then(()=>toast('لینک کپی شد','ok'))" title="کپی لینک"><i class="ti ti-copy"></i></button>
         <button class="btn btn-sm btn-g btn-icon" onclick="navigator.clipboard.writeText('${esc(l.sub_url)}').then(()=>toast('Sub کپی شد','ok'))" title="Sub URL"><i class="ti ti-rss"></i></button>
         <button class="btn btn-sm btn-g btn-icon" onclick="showQR('${esc(l.vless_link)}')" title="QR"><i class="ti ti-qrcode"></i></button>
+        ${(l.bypass_iran&&l.protocol==='vless-ws')?`<button class="btn btn-sm btn-g btn-icon" onclick="navigator.clipboard.writeText('${esc(l.sub_url)}/singbox').then(()=>toast('لینک ساب sing-box کپی شد','ok'))" title="لینک ساب sing-box (بای‌پس ایران)"><i class="ti ti-map-2"></i></button>`:''}
         <button class="btn btn-sm btn-amber btn-icon" onclick="openEditLink('${l.uuid}')" title="ویرایش"><i class="ti ti-edit"></i></button>
         <button class="btn btn-sm btn-g btn-icon" onclick="resetUsage('${l.uuid}')" title="ریست مصرف"><i class="ti ti-rotate"></i></button>
         <button class="btn btn-sm btn-d btn-icon" onclick="deleteLink('${l.uuid}')" title="حذف"><i class="ti ti-trash"></i></button>
@@ -1646,8 +1716,11 @@ async function createLink(){
   const ip_limit=Number(document.getElementById('nl-iplimit').value)||0;
   const speed_limit_value=Number(document.getElementById('nl-speed').value)||0;
   const speed_limit_unit=document.getElementById('nl-speed-unit').value;
+  const block_adult=document.getElementById('nl-blockadult').classList.contains('on');
+  const social_block=getCheckedSocials('nl-social-list');
+  const bypass_iran=document.getElementById('nl-bypassiran').classList.contains('on');
   try{
-    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit})});
+    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,block_adult,social_block,bypass_iran})});
     if(!r.ok)throw new Error('failed');
     ['nl-label','nl-val','nl-exp','nl-note','nl-alpn'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('nl-port').value='443';
@@ -1655,6 +1728,9 @@ async function createLink(){
     document.getElementById('nl-speed').value='0';
     document.getElementById('nl-alpn-preset').value='';
     document.getElementById('nl-alpn').style.display='none';
+    document.getElementById('nl-blockadult').classList.remove('on');
+    document.getElementById('nl-bypassiran').classList.remove('on');
+    renderSocialCheckboxes('nl-social-list', []);
     toast('کانفیگ ساخته شد ✓','ok');loadLinks();
   }catch(e){toast('خطا در ساخت','err')}
 }
@@ -1673,6 +1749,9 @@ function openEditLink(uuid){
   document.getElementById('el-iplimit').value=l.ip_limit||0;
   if(!l.speed_limit_bytes){document.getElementById('el-speed').value='0';document.getElementById('el-speed-unit').value='MBIT';}
   else{document.getElementById('el-speed').value=(l.speed_limit_bytes*8/1024/1024).toFixed(2);document.getElementById('el-speed-unit').value='MBIT';}
+  document.getElementById('el-blockadult').classList.toggle('on',!!l.block_adult);
+  document.getElementById('el-bypassiran').classList.toggle('on',!!l.bypass_iran);
+  renderSocialCheckboxes('el-social-list', l.social_block||[]);
   openModal('modal-edit-link');
 }
 async function saveEditLink(){
@@ -1688,7 +1767,10 @@ async function saveEditLink(){
   const ip_limit=Number(document.getElementById('el-iplimit').value)||0;
   const speed_limit_value=Number(document.getElementById('el-speed').value)||0;
   const speed_limit_unit=document.getElementById('el-speed-unit').value;
-  const body={label,note,limit_value:val||0,limit_unit:unit,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit};
+  const block_adult=document.getElementById('el-blockadult').classList.contains('on');
+  const social_block=getCheckedSocials('el-social-list');
+  const bypass_iran=document.getElementById('el-bypassiran').classList.contains('on');
+  const body={label,note,limit_value:val||0,limit_unit:unit,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,block_adult,social_block,bypass_iran};
   if(exp&&Number(exp)>0)body.expires_days=Number(exp);
   try{
     const r=await authF('/api/links/'+uuid,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -2073,7 +2155,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   initCharts();
   document.getElementById('set-host').textContent=location.host;
   document.getElementById('sub-all-url')&&(document.getElementById('sub-all-url').textContent=location.protocol+'//'+location.host+'/sub-all');
-  fetchStats();fetchDefaultVless();loadLinks();loadSubs();
+  fetchStats();fetchDefaultVless();loadLinks();loadSubs();loadSocialPlatforms();
   setInterval(fetchStats,4000);
   setInterval(()=>{
     if(document.getElementById('pg-links').classList.contains('on'))loadLinks();
