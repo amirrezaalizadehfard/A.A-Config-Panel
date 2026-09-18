@@ -345,7 +345,7 @@ def get_host(request: Request | None = None) -> str:
     RAILWAY_PUBLIC_DOMAIN فقط به‌عنوان fallback استفاده می‌شه، چون گاهی موقع بالا اومدن
     کانتینر هنوز مقداردهی نشده و باعث می‌شد لینک‌ها گاهی با "localhost" ساخته بشن."""
     if request is not None:
-        h = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        h = request.headers.get("x-real-panel-domain") or request.headers.get("x-forwarded-host") or request.headers.get("host")
         if h:
             h = h.split(":")[0]
             CONFIG["host"] = h  # کش آخرین دامنه‌ی واقعی دیده‌شده، برای جاهایی که request نداریم (مثل ربات تلگرام)
